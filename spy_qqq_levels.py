@@ -64,12 +64,27 @@ EDGE_ALPHA = 0.9              # opacity of the band's top/bottom border lines
 # --------------------------------------------------------------------------
 # Data
 # --------------------------------------------------------------------------
+def adjust(df: pd.DataFrame) -> pd.DataFrame:
+    """Open / High / Low / Close scaled by Yahoo's Adj Close / Close, so past bars are net of every dividend paid
+    since (TradingView with ADJ on). Same as AutoTasks' common/prices.adjust; the newest bar is unchanged."""
+    if df.empty or "Adj Close" not in df or "Close" not in df:
+        return df
+    f = (df["Adj Close"] / df["Close"]).where(lambda x: x.notna() & (x > 0), 1.0)
+    out = df.copy()
+    for c in ("Open", "High", "Low", "Close"):
+        out[c] = out[c] * f
+    out["Adj Close"] = out["Close"]
+    return out
+
+
 def fetch_data(ticker: str, period: str, interval: str) -> pd.DataFrame:
+    """Dividend-adjusted bars (owner, 2026-11-15: adjusted prices everywhere, as AutoTasks), so the SMAs, the zones
+    and the chart all use the same adjusted history."""
     import yfinance as yf
     df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
     if df.empty:
         raise RuntimeError(f"No data returned for {ticker} ({interval}).")
-    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+    df = adjust(df)[["Open", "High", "Low", "Close", "Volume"]].dropna()
     df.index = pd.to_datetime(df.index).tz_localize(None)
     return df
 
